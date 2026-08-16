@@ -1,0 +1,25 @@
+# Environment variables
+.env
+
+# Build files
+/tmp/
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+
+# Go cache
+vendor/
+
