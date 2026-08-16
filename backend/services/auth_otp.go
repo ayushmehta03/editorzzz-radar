@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ayushmehta03/editorz-userRepo/backend/internal/database"
-	"github.com/ayushmehta03/editorz-userRepo/backend/internal/models"
-	"github.com/ayushmehta03/editorz-userRepo/backend/internal/utils"
+	"github.com/ayushmehta03/editorzzz-radar-backend/internal/database"
+	"github.com/ayushmehta03/editorzzz-radar-backend/internal/models"
+	"github.com/ayushmehta03/editorzzz-radar-backend/internal/utils"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -45,28 +45,28 @@ func VerifyPhoneOTP(client *mongo.Client) gin.HandlerFunc {
 		editorCollection := database.OpenCollection("editors", client)
 
 		// find the user with the id given in request body
-		var user models.User
+		var hirer models.Hirers
 		if err := editorCollection.FindOne(ctx, bson.M{
 			"_id": userID,
-		}).Decode(&user); err != nil {
+		}).Decode(&hirer); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 			return
 		}
 
 		// already verified
-		if user.IsPhoneVerified {
+		if hirer.IsPhoneVerified {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Phone number already verified"})
 			return
 		}
 
 		// verificationId must exist (generated when OTP was sent)
-		if user.VerificationID == "" {
+		if hirer.VerificationID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "No active phone verification found"})
 			return
 		}
 
 		//  VERIFY OTP VIA MESSAGE CENTRAL
-		if err := utils.MessageCentralVerifyOTP(user.VerificationID, req.OTP); err != nil {
+		if err := utils.MessageCentralVerifyOTP(hirer.VerificationID, req.OTP); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired OTP"})
 			return
 		}
@@ -95,7 +95,7 @@ func VerifyPhoneOTP(client *mongo.Client) gin.HandlerFunc {
 
 		// generate auth token for the user after successful phone verification
 
-		token,err:=utils.GenerateToken(user.ID.Hex(),user.UserName,user.Role)
+		token,err:=utils.GenerateToken(hirer.ID.Hex(),hirer.UserName,hirer.Role)
 		if err!=nil{
 			c.JSON(http.StatusInternalServerError,gin.H{"error":"Token generation failed"})
 			return 
