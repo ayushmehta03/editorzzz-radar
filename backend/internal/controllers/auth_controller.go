@@ -225,8 +225,7 @@ func LoginEditors(client *mongo.Client) gin.HandlerFunc {
 
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":    "Phone verification required",
-				"redirect": "editorzzz.com/verify-phone",
-				"id":       user.ID.Hex(),
+				"message":"Please verify your phone number on editorzzz.com",
 			})
 			return
 		}
