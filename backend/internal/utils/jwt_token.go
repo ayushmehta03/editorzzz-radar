@@ -38,6 +38,44 @@ func GenerateToken(hirerId,username,role string)(string,error){
 
 	return token.SignedString([]byte(secret));
 
+
+
+}
+
+
+
+func VerifyToken(tokenStr string)(*JWTClaims,error){
 	
+	// get the secret
+		secret:=os.Getenv("JWT_SECRET")
+
+		// check the signing method algo ,secretkey and expiry as well as issued time
+
+		token,err:=jwt.ParseWithClaims(
+			tokenStr,
+			&JWTClaims{},
+			func (token *jwt.Token)(interface{},error){
+				return []byte(secret),nil
+			},
+		)
+
+		if err!=nil{
+			return nil,err
+		}
+
+		// place the value inside claims struct
+
+		claims,ok:=token.Claims.(*JWTClaims)
+
+		if !ok || !token.Valid{
+			return nil,jwt.ErrTokenInvalidClaims
+		}
+
+		// return the claims struct 
+
+		// so that email,userid and role can be trusted
+
+		return claims,nil
+
 
 }
