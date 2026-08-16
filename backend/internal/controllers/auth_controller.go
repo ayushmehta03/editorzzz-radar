@@ -123,102 +123,130 @@ func RegisterAccount(client *mongo.Client) gin.HandlerFunc {
 }
 
 
-func LoginEditors(client *mongo.Client)gin.HandlerFunc{
-	editorCollection:=database.OpenCollection("editors",client)
-	return func(c*gin.Context){
+func LoginEditors(client *mongo.Client) gin.HandlerFunc {
+	editorCollection := database.OpenCollection("editors", client)
 
-	var req struct{
-		Identifier string `json:"identifier" binding:"required"` // Username or Phone
-            Password   string `json:"password" binding:"required"`
-	}
+	return func(c *gin.Context) {
 
-	if err:=c.ShouldBindJSON(&req);err!=nil{
-		c.JSON(http.StatusBadRequest,gin.H{"error":"Invalid input"})
-		return
-	}
+		var req struct {
+			Identifier string `json:"identifier" binding:"required"` // Username or Phone
+			Password   string `json:"password" binding:"required"`
+		}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-        defer cancel()
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+			return
+		}
 
-        inputIdentifier := strings.TrimSpace(req.Identifier)
-        
-       
-        formattedPhone := inputIdentifier
-        isNumeric := true
-        for _, r := range inputIdentifier {
-            if r < '0' || r > '1' { // simple digit checking
-                if r < '0' || r > '9' {
-                    isNumeric = false
-                    break
-                }
-            }
-        }
-        
-        if isNumeric && len(inputIdentifier) == 10 {
-            formattedPhone = "+91" + inputIdentifier
-        }
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+		defer cancel()
+
+		inputIdentifier := strings.TrimSpace(req.Identifier)
+
+		formattedPhone := inputIdentifier
+		isNumeric := true
+
+		for _, r := range inputIdentifier {
+			if r < '0' || r > '9' {
+				isNumeric = false
+				break
+			}
+		}
+
+		if isNumeric && len(inputIdentifier) == 10 {
+			formattedPhone = "+91" + inputIdentifier
+		}
 
 		var user models.User
-        filter := bson.M{
-            "$or": []bson.M{
-                {"username": inputIdentifier},
-                {"phone":    inputIdentifier},
-                {"phone":    formattedPhone},
-            },
-        }
 
-        err := editorCollection.FindOne(ctx, filter).Decode(&user)
-        if err != nil {
-            c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid identifier or password"})
-            return
-        }
+		filter := bson.M{
+			"$or": []bson.M{
+				{"username": inputIdentifier},
+				{"phone": inputIdentifier},
+				{"phone": formattedPhone},
+			},
+		}
 
-        if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-            c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid identifier or password"})
-            return
-        }
+		err := editorCollection.FindOne(ctx, filter).Decode(&user)
 
-        if !user.IsPhoneVerified {
-            phone := strings.TrimSpace(user.Phone)
-            verificationID, err := utils.MessageCentralSendOTP(phone)
-            if err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send phone OTP"})
-                return
-            }
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				c.JSON(http.StatusNotFound, gin.H{
+					"error":   "No account found",
+					"message": "No account found. Create an account on editorzzz.com",
+				})
+				return
+			}
 
-            _, err = editorCollection.UpdateOne(
-                ctx,
-                bson.M{"_id": user.ID},
-                bson.M{
-                    "$set": bson.M{
-                        "verification_id": verificationID,
-                        "updated_at":      time.Now(),
-                    },
-                },
-            )
-            if err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store verification session"})
-                return
-            }
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to find account",
+			})
+			return
+		}
 
-            c.JSON(http.StatusForbidden, gin.H{
-                "error":    "Phone verification required",
-                "redirect": "/verify-phone",
-                "id":       user.ID.Hex(), 
-            })
-            return
-        }
+		if err := bcrypt.CompareHashAndPassword(
+			[]byte(user.PasswordHash),
+			[]byte(req.Password),
+		); err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Invalid password",
+			})
+			return
+		}
 
-        token, err := utils.GenerateToken(user.ID.Hex(), user.UserName, user.Role)
-        if err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate session"})
-            return
-        }
+		if !user.IsPhoneVerified {
+			phone := strings.TrimSpace(user.Phone)
 
-        c.JSON(http.StatusOK, gin.H{
-            "message": "Login successful",
-            "token":   token,
-        })
+			verificationID, err := utils.MessageCentralSendOTP(phone)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to send phone OTP",
+				})
+				return
+			}
 
+			_, err = editorCollection.UpdateOne(
+				ctx,
+				bson.M{"_id": user.ID},
+				bson.M{
+					"$set": bson.M{
+						"verification_id": verificationID,
+						"updated_at":      time.Now(),
+					},
+				},
+			)
+
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to store verification session",
+				})
+				return
+			}
+
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":    "Phone verification required",
+				"redirect": "/verify-phone",
+				"id":       user.ID.Hex(),
+			})
+			return
+		}
+
+		token, err := utils.GenerateToken(
+			user.ID.Hex(),
+			user.UserName,
+			user.Role,
+		)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to generate session",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Login successful",
+			"token":   token,
+		})
 	}
 }
