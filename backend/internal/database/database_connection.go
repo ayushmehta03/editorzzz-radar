@@ -17,7 +17,9 @@ func ConnectMongo()*mongo.Client{
 		log.Fatal("MONGODB_URI not set")
 	}
 
-	clientOptions:=options.Client().Apply(mongoUri).SetConnectionTimeOut(10*time.Second);
+clientOptions := options.Client().
+		ApplyURI(mongoUri).
+		SetConnectTimeout(10 * time.Second)
 
 	ctx,cancel:=context.WithTimeout(context.Background(),10*time.Second)
 	defer cancel()
