@@ -1,0 +1,43 @@
+package utils
+
+import (
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
+)
+
+type JWTClaims struct{
+	HirerId string `json:"hirer_id"`
+	Username string `json:"username"`
+	Role string `json:"role"`
+	jwt.RegisteredClaims
+}
+
+
+func GenerateToken(hirerId,username,role string)(string,error){
+
+	secret:=os.Getenv("JWT_SECRET")
+
+	claims:=JWTClaims{
+		HirerId: hirerId,
+		Username: username,
+		Role: role,
+      RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(48*time.Hour)),
+			IssuedAt: jwt.NewNumericDate(time.Now()),
+			
+		},
+		
+	}
+
+	token:=jwt.NewWithClaims(jwt.SigningMethodHS256,claims)
+
+
+	return token.SignedString([]byte(secret));
+
+	
+
+}
