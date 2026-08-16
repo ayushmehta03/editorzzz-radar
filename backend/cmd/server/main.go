@@ -7,8 +7,10 @@ import (
 	"os"
 
 	"github.com/ayushmehta03/editorzzz-radar-backend/internal/database"
+	"github.com/ayushmehta03/editorzzz-radar-backend/routes"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/joho/godotenv"
 )
@@ -37,7 +39,9 @@ log.Printf("Mongo disconnect error: %v",err)
 }
 }()
 
-
+rdb:=redis.NewClient(&redis.Options{
+Addr:"localhost:6379",
+})
 
 router.Use(cors.New(cors.Config{
 AllowAllOrigins: true,
@@ -59,6 +63,10 @@ ExposeHeaders: []string{
 },
 AllowCredentials: false, 
 }))
+
+
+
+routes.AuthRoutes(router,client,rdb)
 
 
 
