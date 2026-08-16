@@ -120,3 +120,52 @@ func RegisterAccount(client *mongo.Client) gin.HandlerFunc {
 		})
 	}
 }
+
+
+func LoginEditors(client *mongo.Client)gin.HandlerFunc{
+	editorCollection:=database.OpenCollection("editors",client)
+	return func(c*gin.Context){
+
+	var req struct{
+		Identifier string `json:"identifier" binding:"required"` // Username or Phone
+            Password   string `json:"password" binding:"required"`
+	}
+
+	if err:=c.ShouldBindJSON(&req);err!=nil{
+		c.JSON(http.StatusBadRequest,gin.H{"error":"Invalid input"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+        defer cancel()
+
+        inputIdentifier := strings.TrimSpace(req.Identifier)
+        
+       
+        formattedPhone := inputIdentifier
+        isNumeric := true
+        for _, r := range inputIdentifier {
+            if r < '0' || r > '1' { // simple digit checking
+                if r < '0' || r > '9' {
+                    isNumeric = false
+                    break
+                }
+            }
+        }
+        
+        if isNumeric && len(inputIdentifier) == 10 {
+            formattedPhone = "+91" + inputIdentifier
+        }
+
+		var user models.User
+        filter := bson.M{
+            "$or": []bson.M{
+                {"username": inputIdentifier},
+                {"phone":    inputIdentifier},
+                {"phone":    formattedPhone},
+            },
+        }
+
+
+	}
+}
