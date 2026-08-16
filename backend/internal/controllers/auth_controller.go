@@ -16,6 +16,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func RegisterAccount(client *mongo.Client) gin.HandlerFunc {
@@ -166,6 +167,58 @@ func LoginEditors(client *mongo.Client)gin.HandlerFunc{
             },
         }
 
+        err := editorCollection.FindOne(ctx, filter).Decode(&user)
+        if err != nil {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid identifier or password"})
+            return
+        }
+
+        if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid identifier or password"})
+            return
+        }
+
+        if !user.IsPhoneVerified {
+            phone := strings.TrimSpace(user.Phone)
+            verificationID, err := utils.MessageCentralSendOTP(phone)
+            if err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send phone OTP"})
+                return
+            }
+
+            _, err = editorCollection.UpdateOne(
+                ctx,
+                bson.M{"_id": user.ID},
+                bson.M{
+                    "$set": bson.M{
+                        "verification_id": verificationID,
+                        "updated_at":      time.Now(),
+                    },
+                },
+            )
+            if err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store verification session"})
+                return
+            }
+
+            c.JSON(http.StatusForbidden, gin.H{
+                "error":    "Phone verification required",
+                "redirect": "/verify-phone",
+                "id":       user.ID.Hex(), 
+            })
+            return
+        }
+
+        token, err := utils.GenerateToken(user.ID.Hex(), user.UserName, user.Role)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate session"})
+            return
+        }
+
+        c.JSON(http.StatusOK, gin.H{
+            "message": "Login successful",
+            "token":   token,
+        })
 
 	}
 }
