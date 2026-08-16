@@ -38,3 +38,12 @@ func ConnectMongo()*mongo.Client{
 	// return the client once everything is done
 	return client
 }
+
+func OpenCollection(name string,client *mongo.Client) *mongo.Collection{
+	databaseName:=os.Getenv("DATABASE_NAME")
+	 if databaseName==""{
+		log.Fatal("database name is not set")
+	 }
+
+	 return client.Database(databaseName).Collection(name);
+}
