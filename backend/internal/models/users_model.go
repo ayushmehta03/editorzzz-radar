@@ -3,10 +3,12 @@ package models
 import (
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 
 type Hirers struct{
+	ID primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 
 	FullName string `bson:"full_name" json:"full_name"`
 	UserName string `bson:"username" json:"username" validate:"required,min=5,max=20"`
