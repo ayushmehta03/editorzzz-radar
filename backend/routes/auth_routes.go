@@ -19,6 +19,8 @@ func AuthRoutes(router *gin.Engine,client*mongo.Client, redis *redis.Client){
 	auth.POST("/verify-phone",services.VerifyPhoneOTP(client))
 	auth.POST("/login",controllers.LoginWithPassword(client))
 	auth.POST("/login-editors",controllers.LoginEditors(client))
-
+auth.POST("/forgot-password",controllers.ForgetPassword(client))
+	auth.POST("/reset-password",controllers.ResetPassword(client))
+	auth.GET("/phone-cooldown", controllers.CheckPhoneCooldown(redis,client))
 
 }
