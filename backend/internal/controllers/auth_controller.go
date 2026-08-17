@@ -377,3 +377,49 @@ func LoginWithPassword(client *mongo.Client)gin.HandlerFunc{
 		})
 	}
 }
+
+
+func ForgetPassword(client *mongo.Client)gin.HandlerFunc{
+	return func(c *gin.Context){
+		var req struct{
+			Identifier string `json:"identifier" binding:"required"`
+
+		}
+
+		if err:=c.ShouldBindJSON(&req);err!=nil{
+			c.JSON(http.StatusBadRequest,gin.H{"error":"Invalid input"})
+			return
+		}
+
+
+		ctx,cancel:=context.WithTimeout(context.Background(),10*time.Second)
+		defer cancel()
+
+
+        filter := bson.M{
+            "$or": []bson.M{
+                {"username": req.Identifier},
+                {"phone": req.Identifier},
+            },
+        }
+
+		var hirer models.Hirers
+
+		hirerCollection:=database.OpenCollection("hirers",client)
+		err:=hirerCollection.FindOne(ctx,filter);
+
+		 if err != nil {
+            c.JSON(http.StatusNotFound, gin.H{"error": "No account found"})
+            return
+        }
+
+
+		 phone := strings.TrimSpace(hirer.Phone)
+        verificationID, err := utils.MessageCentralSendOTP()
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send phone OTP"})
+            return
+        }
+
+	}
+}
