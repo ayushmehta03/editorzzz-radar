@@ -378,48 +378,73 @@ func LoginWithPassword(client *mongo.Client)gin.HandlerFunc{
 	}
 }
 
-
-func ForgetPassword(client *mongo.Client)gin.HandlerFunc{
-	return func(c *gin.Context){
-		var req struct{
-			Identifier string `json:"identifier" binding:"required"`
-
+func ForgetPassword(client *mongo.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Identifier string `json:"identifier" binding:"required"` // Username or Phone
 		}
 
-		if err:=c.ShouldBindJSON(&req);err!=nil{
-			c.JSON(http.StatusBadRequest,gin.H{"error":"Invalid input"})
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid input",
+			})
 			return
 		}
 
-
-		ctx,cancel:=context.WithTimeout(context.Background(),10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
+		hirerCollection := database.OpenCollection("hirers", client)
 
-        filter := bson.M{
-            "$or": []bson.M{
-                {"username": req.Identifier},
-                {"phone": req.Identifier},
-            },
-        }
+		filter := bson.M{
+			"$or": []bson.M{
+				{"username": req.Identifier},
+				{"phone": req.Identifier},
+			},
+		}
 
 		var hirer models.Hirers
 
-		hirerCollection:=database.OpenCollection("hirers",client)
-		err:=hirerCollection.FindOne(ctx,filter);
+		err := hirerCollection.FindOne(ctx, filter).Decode(&hirer)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "No account found",
+			})
+			return
+		}
 
-		 if err != nil {
-            c.JSON(http.StatusNotFound, gin.H{"error": "No account found"})
-            return
-        }
+		phone := strings.TrimSpace(hirer.Phone)
 
+		verificationID, err := utils.MessageCentralSendOTP(phone)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to send phone OTP",
+			})
+			return
+		}
 
-		 phone := strings.TrimSpace(hirer.Phone)
-        verificationID, err := utils.MessageCentralSendOTP()
-        if err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send phone OTP"})
-            return
-        }
+		update := bson.M{
+			"$set": bson.M{
+				"verification_id": verificationID,
+				"updated_at":      time.Now(),
+			},
+		}
 
+		_, err = hirerCollection.UpdateOne(
+			ctx,
+			bson.M{"_id": hirer.ID},
+			update,
+		)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to initiate password reset",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "OTP sent to your registered phone number",
+		})
 	}
 }
