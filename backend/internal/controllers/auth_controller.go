@@ -13,6 +13,7 @@ import (
 	"github.com/ayushmehta03/editorzzz-radar-backend/internal/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -537,6 +538,76 @@ func ResetPassword(client *mongo.Client) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Password reset successful",
+		})
+	}
+}
+func CheckPhoneCooldown(redisClient *redis.Client, mongoClient *mongo.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.Query("user_id")
+		identifier := strings.TrimSpace(c.Query("identifier"))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		
+		if userID == "" && identifier != "" {
+			hirerCollection := database.OpenCollection("hirers", mongoClient)
+
+			filter := bson.M{
+				"$or": []bson.M{
+					{"username": identifier},
+					{"phone": identifier},
+				},
+			}
+
+			var hirer struct {
+				ID primitive.ObjectID `bson:"_id"`
+			}
+
+			if err := hirerCollection.FindOne(ctx, filter).Decode(&hirer); err == nil {
+				userID = hirer.ID.Hex()
+			}
+		}
+
+		// No user found / no user ID provided
+		if userID == "" {
+			c.JSON(http.StatusOK, gin.H{
+				"cooldown": 0,
+				"blocked":  false,
+			})
+			return
+		}
+
+		keyBase := fmt.Sprintf("otp:phone:%s", userID)
+		blockKey := fmt.Sprintf("%s:block", keyBase)
+		cooldownKey := fmt.Sprintf("%s:cooldown", keyBase)
+
+		// Check if user is blocked
+		if blocked, _ := redisClient.Exists(ctx, blockKey).Result(); blocked == 1 {
+			ttl, _ := redisClient.TTL(ctx, blockKey).Result()
+
+			c.JSON(http.StatusOK, gin.H{
+				"cooldown": int(ttl.Seconds()),
+				"blocked":  true,
+			})
+			return
+		}
+
+		// Check OTP cooldown
+		if exists, _ := redisClient.Exists(ctx, cooldownKey).Result(); exists == 1 {
+			ttl, _ := redisClient.TTL(ctx, cooldownKey).Result()
+
+			c.JSON(http.StatusOK, gin.H{
+				"cooldown": int(ttl.Seconds()),
+				"blocked":  false,
+			})
+			return
+		}
+
+		// No cooldown / block
+		c.JSON(http.StatusOK, gin.H{
+			"cooldown": 0,
+			"blocked":  false,
 		})
 	}
 }
