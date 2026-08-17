@@ -448,3 +448,95 @@ func ForgetPassword(client *mongo.Client) gin.HandlerFunc {
 		})
 	}
 }
+
+
+func ResetPassword(client *mongo.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Identifier  string `json:"identifier" binding:"required"` // Username or Phone
+			OTP         string `json:"otp" binding:"required"`
+			NewPassword string `json:"new_password" binding:"required"`
+		}
+
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid input",
+			})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		hirerCollection := database.OpenCollection("hirers", client)
+
+		filter := bson.M{
+			"$or": []bson.M{
+				{"username": req.Identifier},
+				{"phone": req.Identifier},
+			},
+		}
+
+		var hirer models.Hirers
+
+		err := hirerCollection.FindOne(ctx, filter).Decode(&hirer)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Hirer not found",
+			})
+			return
+		}
+
+		if hirer.VerificationID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "No active phone verification found",
+			})
+			return
+		}
+
+		if err := utils.MessageCentralVerifyOTP(
+			hirer.VerificationID,
+			req.OTP,
+		); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid or expired OTP",
+			})
+			return
+		}
+
+		hashedPassword, err := utils.HashPassword(req.NewPassword)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to process password",
+			})
+			return
+		}
+
+		update := bson.M{
+			"$set": bson.M{
+				"password":   hashedPassword,
+				"updated_at": time.Now(),
+			},
+			"$unset": bson.M{
+				"verification_id": "",
+			},
+		}
+
+		_, err = hirerCollection.UpdateOne(
+			ctx,
+			bson.M{"_id": hirer.ID},
+			update,
+		)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to reset password",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Password reset successful",
+		})
+	}
+}
