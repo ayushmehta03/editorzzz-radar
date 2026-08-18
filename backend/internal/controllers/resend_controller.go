@@ -17,6 +17,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+//resend otp function
 func ResendPhoneOtp(client *mongo.Client, redisClient *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
