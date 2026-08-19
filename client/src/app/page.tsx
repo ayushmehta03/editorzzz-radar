@@ -69,10 +69,6 @@ export default function HomePage() {
       ctx.stroke();
 
       // Sweep gradient trail
-      const trailGrad = ctx.createConicGradient
-        ? null // not standard, skip
-        : null;
-
       // Draw sweep as a filled arc
       const sweepArc = (Math.PI * 2) / 3; // 120° trail
       const grad = ctx.createLinearGradient(cx, cy, cx + radius, cy);
