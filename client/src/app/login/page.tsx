@@ -1,40 +1,155 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, FormEvent } from "react";
+import { login } from "@/lib/api"; // adjust import path to wherever api.ts lives
 
 export default function HireLoginPage() {
   const router = useRouter();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [mounted, setMounted] = useState(false);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ identifier?: boolean; password?: boolean }>({});
 
+  // Radar sweep animation on canvas (same signature as the landing page, smaller + quieter)
   useEffect(() => {
-    setMounted(true);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId: number;
+    let angle = 0;
+
+    const resize = () => {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const draw = () => {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const radius = Math.min(cx, cy) - 4;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      [1, 0.6].forEach((scale) => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * scale, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(232,255,71,0.10)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
+
+      const sweepArc = (Math.PI * 2) / 3;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, radius, -sweepArc, 0);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(232,255,71,0.08)";
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(radius, 0);
+      ctx.strokeStyle = "rgba(232,255,71,0.6)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(232,255,71,0.7)";
+      ctx.fill();
+
+      angle += 0.016;
+      animId = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", resize);
+    };
   }, []);
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError("");
-    if (!email || !password) {
-      setError("ALL FIELDS ARE REQUIRED.");
+    setError(null);
+    setFieldErrors({});
+
+    if (!identifier.trim() || !password) {
+      setFieldErrors({
+        identifier: !identifier.trim(),
+        password: !password,
+      });
+      setError("Enter your username or phone, and your password.");
       return;
     }
+
     setLoading(true);
     try {
-      // TODO: replace with real API call
-      await new Promise((r) => setTimeout(r, 1200));
-      router.push("/hire/dashboard");
+      const res = await login({ identifier: identifier.trim(), password });
+
+      // Success shape: { message: "Login successful", token: string }
+      if (res?.token) {
+        localStorage.setItem("hirer_token", res.token);
+        router.push("/dashboard");
+        return;
+      }
+
+      // Defensive fallback if the API layer resolves without throwing on non-2xx
+      handleApiError(res);
     } catch (err: any) {
-      setError(err.message || "INVALID CREDENTIALS. TRY AGAIN.");
+      handleApiError(err);
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleApiError(err: any) {
+    const status = err?.status ?? err?.response?.status;
+    const payload = err?.data ?? err?.response?.data ?? err;
+    const message: string | undefined = payload?.message || payload?.error;
+
+    // 403 — phone not verified yet, backend already queued an OTP
+    if (status === 403 || payload?.redirect === "/verify-phone") {
+      const id = payload?.id;
+      router.push(id ? `/verify-phone?id=${id}` : "/verify-phone");
+      return;
+    }
+
+    // 404 — no hirer account found for that identifier
+    if (status === 404) {
+      setError(message || "No account found. Create an account first.");
+      setFieldErrors({ identifier: true });
+      return;
+    }
+
+    // 401 — wrong password
+    if (status === 401) {
+      setError(message || "Incorrect password. Try again.");
+      setFieldErrors({ password: true });
+      return;
+    }
+
+    // 400 — malformed input
+    if (status === 400) {
+      setError(message || "Enter your username or phone, and your password.");
+      return;
+    }
+
+    setError(message || "Something went wrong. Try again in a moment.");
   }
 
   return (
@@ -44,612 +159,417 @@ export default function HireLoginPage() {
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        .hl-root {
+        .hlg-root {
           min-height: 100vh;
           background: #0a0a0a;
           font-family: 'Space Mono', monospace;
           color: #f0ede8;
           display: flex;
-          overflow: hidden;
+          align-items: center;
+          justify-content: center;
+          overflow-x: hidden;
           position: relative;
+          padding: 24px;
         }
 
-        /* grid bg */
-        .hl-root::before {
+        .hlg-root::before {
           content: '';
           position: fixed;
           inset: 0;
           background-image:
-            linear-gradient(rgba(232,255,71,0.025) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(232,255,71,0.025) 1px, transparent 1px);
+            linear-gradient(rgba(232,255,71,0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(232,255,71,0.03) 1px, transparent 1px);
           background-size: 48px 48px;
           pointer-events: none;
           z-index: 0;
         }
 
-        /* ── Left panel (decorative) ── */
-        .hl-left {
-          display: none;
-          position: relative;
-          flex: 1;
-          background: #0d0d0d;
-          border-right: 1px solid rgba(232,255,71,0.1);
-          flex-direction: column;
-          justify-content: space-between;
-          padding: 48px;
-          overflow: hidden;
-          z-index: 1;
-        }
-        @media (min-width: 1024px) { .hl-left { display: flex; } }
-
-        .hl-left-grid {
-          position: absolute;
-          inset: 0;
-          background-image:
-            linear-gradient(rgba(232,255,71,0.04) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(232,255,71,0.04) 1px, transparent 1px);
-          background-size: 32px 32px;
-          pointer-events: none;
-        }
-
-        /* animated scan line */
-        .hl-scan {
-          position: absolute;
-          left: 0; right: 0;
-          height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(232,255,71,0.5), transparent);
-          animation: scan 4s ease-in-out infinite;
-          pointer-events: none;
-        }
-        @keyframes scan {
-          0%   { top: 0%;   opacity: 0; }
-          10%  { opacity: 1; }
-          90%  { opacity: 1; }
-          100% { top: 100%; opacity: 0; }
-        }
-
-        .hl-left-brand {
-          position: relative;
-          z-index: 2;
-        }
-        .hl-left-logo {
-          font-family: 'Space Grotesk', sans-serif;
-          font-weight: 900;
-          font-size: 36px;
-          text-transform: uppercase;
-          letter-spacing: -0.03em;
-          color: #f0ede8;
-          line-height: 1;
-        }
-        .hl-left-logo span { color: #e8ff47; }
-        .hl-left-tag {
-          margin-top: 8px;
-          font-family: 'Space Mono', monospace;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.22em;
-          text-transform: uppercase;
-          color: rgba(240,237,232,0.3);
-        }
-
-        /* big decorative stat blocks */
-        .hl-left-stats {
-          position: relative;
-          z-index: 2;
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-        .hl-stat-block {
-          border: 1px solid rgba(232,255,71,0.1);
-          padding: 20px 24px;
-          background: rgba(232,255,71,0.02);
-          opacity: 0;
-          animation: fadeUp 0.6s ease forwards;
-        }
-        .hl-stat-block:nth-child(1) { animation-delay: 0.4s; }
-        .hl-stat-block:nth-child(2) { animation-delay: 0.55s; }
-        .hl-stat-block:nth-child(3) { animation-delay: 0.7s; }
-        .hl-stat-num {
-          font-family: 'Space Grotesk', sans-serif;
-          font-weight: 900;
-          font-size: 40px;
-          color: #e8ff47;
-          letter-spacing: -0.02em;
-          line-height: 1;
-        }
-        .hl-stat-label {
-          font-family: 'Space Mono', monospace;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: rgba(240,237,232,0.35);
-          margin-top: 4px;
-        }
-
-        .hl-left-footer {
-          position: relative;
-          z-index: 2;
-          font-family: 'Space Mono', monospace;
-          font-size: 10px;
-          letter-spacing: 0.12em;
-          color: rgba(240,237,232,0.2);
-        }
-
-        /* ── Right panel (form) ── */
-        .hl-right {
+        .hlg-wrap {
           position: relative;
           z-index: 1;
           width: 100%;
+          max-width: 420px;
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: center;
-          padding: 32px 24px;
-          min-height: 100vh;
-        }
-        @media (min-width: 1024px) {
-          .hl-right {
-            width: 480px;
-            flex-shrink: 0;
-            min-height: 100vh;
-            padding: 48px 56px;
-          }
         }
 
-        .hl-form-wrap {
-          width: 100%;
-          max-width: 400px;
+        .hlg-canvas-wrap {
+          width: 72px;
+          height: 72px;
+          margin-bottom: 8px;
+          opacity: 0;
+          animation: fadeUp 0.6s ease 0.1s forwards;
         }
+        .hlg-canvas { width: 100%; height: 100%; display: block; }
 
-        /* back button */
-        .hl-back {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          font-family: 'Space Mono', monospace;
+        .hlg-eyebrow {
           font-size: 10px;
           font-weight: 700;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: rgba(240,237,232,0.35);
-          background: none;
-          border: none;
-          cursor: pointer;
-          padding: 0;
-          margin-bottom: 40px;
-          transition: color 0.2s;
-          opacity: 0;
-          animation: fadeIn 0.5s ease 0.1s forwards;
-        }
-        .hl-back:hover { color: #e8ff47; }
-
-        /* heading */
-        .hl-eyebrow {
-          font-family: 'Space Mono', monospace;
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.28em;
+          letter-spacing: 0.26em;
           text-transform: uppercase;
           color: #e8ff47;
           margin-bottom: 10px;
           opacity: 0;
-          animation: fadeUp 0.5s ease 0.2s forwards;
+          animation: fadeUp 0.6s ease 0.2s forwards;
         }
-        .hl-heading {
+
+        .hlg-title {
           font-family: 'Space Grotesk', sans-serif;
           font-weight: 900;
-          font-size: clamp(32px, 6vw, 44px);
+          font-size: clamp(30px, 7vw, 40px);
           text-transform: uppercase;
           letter-spacing: -0.02em;
-          line-height: 0.95;
-          color: #f0ede8;
-          margin-bottom: 8px;
+          line-height: 1;
+          text-align: center;
           opacity: 0;
-          animation: fadeUp 0.5s ease 0.3s forwards;
+          animation: fadeUp 0.6s ease 0.3s forwards;
         }
-        .hl-sub {
-          font-family: 'Space Mono', monospace;
+
+        .hlg-sub {
+          margin-top: 10px;
           font-size: 11px;
-          color: rgba(240,237,232,0.35);
+          letter-spacing: 0.04em;
+          color: rgba(240,237,232,0.45);
+          text-align: center;
+          max-width: 320px;
           line-height: 1.6;
-          margin-bottom: 36px;
           opacity: 0;
-          animation: fadeUp 0.5s ease 0.4s forwards;
+          animation: fadeUp 0.6s ease 0.4s forwards;
         }
 
-        /* form */
-        .hl-form {
+        .hlg-form {
+          width: 100%;
+          margin-top: 32px;
           display: flex;
           flex-direction: column;
-          gap: 14px;
+          gap: 16px;
           opacity: 0;
-          animation: fadeUp 0.5s ease 0.5s forwards;
+          animation: fadeUp 0.6s ease 0.5s forwards;
         }
 
-        .hl-field {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-        .hl-label {
-          font-family: 'Space Mono', monospace;
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.22em;
-          text-transform: uppercase;
-          color: rgba(240,237,232,0.4);
-          transition: color 0.2s;
-        }
-        .hl-field.focused .hl-label { color: #e8ff47; }
+        .hlg-field { display: flex; flex-direction: column; gap: 8px; }
 
-        .hl-input-wrap {
-          position: relative;
-          display: flex;
-          align-items: center;
-        }
-        .hl-input {
-          width: 100%;
-          background: #111;
-          border: 1.5px solid rgba(240,237,232,0.1);
-          color: #f0ede8;
-          font-family: 'Space Mono', monospace;
-          font-size: 13px;
-          font-weight: 700;
-          padding: 14px 16px;
-          outline: none;
-          transition: border-color 0.2s, background 0.2s;
-          border-radius: 0;
-          -webkit-appearance: none;
-        }
-        .hl-input::placeholder { color: rgba(240,237,232,0.18); font-weight: 400; }
-        .hl-input:focus {
-          border-color: #e8ff47;
-          background: #131313;
-        }
-        .hl-input.has-right { padding-right: 48px; }
-
-        .hl-input-btn {
-          position: absolute;
-          right: 14px;
-          background: none;
-          border: none;
-          cursor: pointer;
-          color: rgba(240,237,232,0.3);
-          display: flex;
-          align-items: center;
-          padding: 0;
-          transition: color 0.2s;
-        }
-        .hl-input-btn:hover { color: #e8ff47; }
-
-        /* forgot */
-        .hl-forgot {
-          display: flex;
-          justify-content: flex-end;
-          margin-top: -4px;
-        }
-        .hl-forgot-btn {
-          background: none;
-          border: none;
-          font-family: 'Space Mono', monospace;
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
-          color: rgba(240,237,232,0.3);
-          cursor: pointer;
-          padding: 0;
-          transition: color 0.2s;
-          text-decoration: underline;
-          text-decoration-style: dotted;
-          text-underline-offset: 3px;
-        }
-        .hl-forgot-btn:hover { color: #e8ff47; }
-
-        /* error */
-        .hl-error {
-          background: rgba(255,80,80,0.08);
-          border: 1.5px solid rgba(255,80,80,0.3);
-          padding: 10px 14px;
-          font-family: 'Space Mono', monospace;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.1em;
-          color: #ff8080;
-          animation: shake 0.3s ease;
-        }
-        @keyframes shake {
-          0%,100% { transform: translateX(0); }
-          25% { transform: translateX(-6px); }
-          75% { transform: translateX(6px); }
-        }
-
-        /* submit */
-        .hl-submit {
-          margin-top: 6px;
-          width: 100%;
-          padding: 16px 24px;
-          background: #e8ff47;
-          color: #0a0a0a;
-          border: none;
-          font-family: 'Space Grotesk', sans-serif;
-          font-weight: 900;
-          font-size: 14px;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          transition: background 0.2s, transform 0.1s;
-          position: relative;
-          overflow: hidden;
-        }
-        .hl-submit::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: rgba(255,255,255,0.15);
-          opacity: 0;
-          transition: opacity 0.2s;
-        }
-        .hl-submit:hover::after { opacity: 1; }
-        .hl-submit:active { transform: translateY(1px); }
-        .hl-submit:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        /* spinner */
-        .hl-spinner {
-          width: 16px;
-          height: 16px;
-          border: 2.5px solid rgba(10,10,10,0.3);
-          border-top-color: #0a0a0a;
-          border-radius: 50%;
-          animation: spin 0.7s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* divider */
-        .hl-or {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          margin: 4px 0;
-        }
-        .hl-or-line {
-          flex: 1;
-          height: 1px;
-          background: rgba(240,237,232,0.08);
-        }
-        .hl-or-text {
-          font-family: 'Space Mono', monospace;
+        .hlg-label {
           font-size: 9px;
           font-weight: 700;
           letter-spacing: 0.2em;
           text-transform: uppercase;
-          color: rgba(240,237,232,0.2);
+          color: rgba(240,237,232,0.5);
         }
 
-        /* register link */
-        .hl-register {
-          text-align: center;
-          font-family: 'Space Mono', monospace;
-          font-size: 11px;
-          color: rgba(240,237,232,0.3);
-          line-height: 1.5;
+        .hlg-input-row {
+          position: relative;
+          display: flex;
+          align-items: center;
         }
-        .hl-register-link {
+
+        .hlg-input {
+          width: 100%;
+          background: #111;
+          border: 2px solid rgba(240,237,232,0.12);
+          color: #f0ede8;
+          font-family: 'Space Mono', monospace;
+          font-size: 14px;
+          padding: 14px 16px;
+          outline: none;
+          transition: border-color 0.2s, background 0.2s;
+        }
+        .hlg-input::placeholder { color: rgba(240,237,232,0.25); }
+        .hlg-input:focus {
+          border-color: #e8ff47;
+          background: #141400;
+        }
+        .hlg-input.hlg-input-err {
+          border-color: rgba(255,90,90,0.6);
+        }
+        .hlg-input[type="password"],
+        .hlg-input.hlg-has-toggle {
+          padding-right: 52px;
+        }
+
+        .hlg-toggle {
+          position: absolute;
+          right: 12px;
           background: none;
           border: none;
-          font-family: 'Space Mono', monospace;
-          font-size: 11px;
-          font-weight: 700;
-          color: #e8ff47;
-          cursor: pointer;
-          padding: 0;
-          text-decoration: underline;
-          text-decoration-style: dotted;
-          text-underline-offset: 3px;
-          transition: opacity 0.2s;
-        }
-        .hl-register-link:hover { opacity: 0.75; }
-
-        /* bottom note */
-        .hl-bottom-note {
-          margin-top: 32px;
-          text-align: center;
+          color: rgba(240,237,232,0.4);
           font-family: 'Space Mono', monospace;
           font-size: 9px;
-          letter-spacing: 0.12em;
-          color: rgba(240,237,232,0.15);
-          opacity: 0;
-          animation: fadeIn 0.6s ease 1s forwards;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          cursor: pointer;
+          padding: 6px;
+          transition: color 0.2s;
+        }
+        .hlg-toggle:hover { color: #e8ff47; }
+        .hlg-toggle:focus-visible {
+          outline: 2px solid #e8ff47;
+          outline-offset: 2px;
         }
 
-        /* animations */
+        .hlg-row-between {
+          display: flex;
+          justify-content: flex-end;
+        }
+
+        .hlg-link {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: rgba(240,237,232,0.45);
+          text-decoration: none;
+          background: none;
+          border: none;
+          cursor: pointer;
+          transition: color 0.2s;
+        }
+        .hlg-link:hover { color: #e8ff47; }
+        .hlg-link:focus-visible {
+          outline: 2px solid #e8ff47;
+          outline-offset: 2px;
+        }
+
+        .hlg-error {
+          border: 2px solid rgba(255,90,90,0.4);
+          background: rgba(255,90,90,0.08);
+          color: #ffb3b3;
+          font-size: 11px;
+          line-height: 1.6;
+          padding: 12px 14px;
+        }
+
+        .hlg-submit {
+          margin-top: 4px;
+          position: relative;
+          background: #e8ff47;
+          color: #0a0a0a;
+          border: 2px solid #e8ff47;
+          font-family: 'Space Mono', monospace;
+          font-weight: 700;
+          font-size: 12px;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          padding: 16px;
+          cursor: pointer;
+          transition: background 0.2s, color 0.2s, transform 0.1s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+        }
+        .hlg-submit:hover:not(:disabled) { background: #f2ffb0; }
+        .hlg-submit:active:not(:disabled) { transform: translateY(1px); }
+        .hlg-submit:disabled {
+          background: transparent;
+          color: #e8ff47;
+          cursor: not-allowed;
+        }
+        .hlg-submit:focus-visible {
+          outline: 2px solid #f0ede8;
+          outline-offset: 3px;
+        }
+
+        .hlg-spinner {
+          width: 13px;
+          height: 13px;
+          border: 2px solid rgba(10,10,10,0.25);
+          border-top-color: #0a0a0a;
+          border-radius: 50%;
+          animation: spin 0.7s linear infinite;
+        }
+
+        .hlg-divider-row {
+          margin-top: 28px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          opacity: 0;
+          animation: fadeIn 0.6s ease 0.7s forwards;
+        }
+        .hlg-divider-line {
+          flex: 1;
+          height: 1px;
+          background: rgba(240,237,232,0.1);
+        }
+        .hlg-divider-text {
+          font-size: 9px;
+          letter-spacing: 0.16em;
+          color: rgba(240,237,232,0.25);
+          text-transform: uppercase;
+        }
+
+        .hlg-register {
+          margin-top: 20px;
+          text-align: center;
+          font-size: 12px;
+          color: rgba(240,237,232,0.45);
+          opacity: 0;
+          animation: fadeIn 0.6s ease 0.8s forwards;
+        }
+        .hlg-register button {
+          background: none;
+          border: none;
+          color: #e8ff47;
+          font-family: 'Space Mono', monospace;
+          font-weight: 700;
+          font-size: 12px;
+          letter-spacing: 0.03em;
+          cursor: pointer;
+          text-decoration: underline;
+          text-underline-offset: 3px;
+        }
+        .hlg-register button:hover { color: #f2ffb0; }
+        .hlg-register button:focus-visible {
+          outline: 2px solid #e8ff47;
+          outline-offset: 2px;
+        }
+
+        .hlg-back {
+          margin-top: 36px;
+          font-size: 10px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: rgba(240,237,232,0.25);
+          text-decoration: none;
+          background: none;
+          border: none;
+          cursor: pointer;
+          transition: color 0.2s;
+          opacity: 0;
+          animation: fadeIn 0.6s ease 0.9s forwards;
+        }
+        .hlg-back:hover { color: #e8ff47; }
+
         @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(16px); }
+          from { opacity: 0; transform: translateY(14px); }
           to   { opacity: 1; transform: translateY(0); }
         }
         @keyframes fadeIn {
           from { opacity: 0; }
           to   { opacity: 1; }
         }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
 
         @media (prefers-reduced-motion: reduce) {
-          * { animation: none !important; opacity: 1 !important; }
+          .hlg-canvas-wrap, .hlg-eyebrow, .hlg-title, .hlg-sub,
+          .hlg-form, .hlg-divider-row, .hlg-register, .hlg-back {
+            animation: none;
+            opacity: 1;
+          }
+          .hlg-spinner { animation: none; }
+        }
+
+        @media (max-width: 380px) {
+          .hlg-input { padding: 12px 14px; }
+          .hlg-submit { padding: 14px; }
         }
       `}</style>
 
-      <div className="hl-root">
-
-        {/* ── Left decorative panel ── */}
-        <div className="hl-left">
-          <div className="hl-left-grid" />
-          <div className="hl-scan" />
-
-          <div className="hl-left-brand">
-            <div className="hl-left-logo">RAD<span>A</span>R</div>
-            <div className="hl-left-tag">TALENT INTELLIGENCE PLATFORM</div>
+      <div className="hlg-root">
+        <div className="hlg-wrap">
+          <div className="hlg-canvas-wrap">
+            <canvas ref={canvasRef} className="hlg-canvas" />
           </div>
 
-          <div className="hl-left-stats">
-            <div className="hl-stat-block">
-              <div className="hl-stat-num">2,400+</div>
-              <div className="hl-stat-label">VERIFIED EDITORS ON PLATFORM</div>
-            </div>
-            <div className="hl-stat-block">
-              <div className="hl-stat-num">340+</div>
-              <div className="hl-stat-label">CONTESTS COMPLETED</div>
-            </div>
-            <div className="hl-stat-block">
-              <div className="hl-stat-num">98%</div>
-              <div className="hl-stat-label">HIRING SATISFACTION RATE</div>
-            </div>
-          </div>
+          <p className="hlg-eyebrow">FOR STUDIOS &amp; TEAMS</p>
+          <h1 className="hlg-title">Hiring Manager</h1>
+          <p className="hlg-sub">
+            Sign in to browse verified talent and review contest results.
+          </p>
 
-          <div className="hl-left-footer">
-            © {new Date().getFullYear()} RADAR · ALL RIGHTS RESERVED
-          </div>
-        </div>
+          <form className="hlg-form" onSubmit={handleSubmit} noValidate>
+            {error && <div className="hlg-error" role="alert">{error}</div>}
 
-        {/* ── Right form panel ── */}
-        <div className="hl-right">
-          <div className="hl-form-wrap">
+            <div className="hlg-field">
+              <label className="hlg-label" htmlFor="identifier">
+                Username or Phone
+              </label>
+              <div className="hlg-input-row">
+                <input
+                  id="identifier"
+                  name="identifier"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="Username or phone"
+                  className={`hlg-input${fieldErrors.identifier ? " hlg-input-err" : ""}`}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+            </div>
 
-            {/* Back */}
-            <button className="hl-back" onClick={() => router.push("/")}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 12H5M12 5l-7 7 7 7"/>
-              </svg>
-              BACK TO HOME
+            <div className="hlg-field">
+              <label className="hlg-label" htmlFor="password">
+                Password
+              </label>
+              <div className="hlg-input-row">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  className={`hlg-input hlg-has-toggle${fieldErrors.password ? " hlg-input-err" : ""}`}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  className="hlg-toggle"
+                  onClick={() => setShowPassword((s) => !s)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? "HIDE" : "SHOW"}
+                </button>
+              </div>
+              <div className="hlg-row-between">
+                <button
+                  type="button"
+                  className="hlg-link"
+                  onClick={() => router.push("/forgot-password")}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" className="hlg-submit" disabled={loading}>
+              {loading ? (
+                <>
+                  <span className="hlg-spinner" />
+                  SIGNING IN
+                </>
+              ) : (
+                "SIGN IN"
+              )}
             </button>
+          </form>
 
-            {/* Heading */}
-            <p className="hl-eyebrow">HIRING MANAGER PORTAL</p>
-            <h1 className="hl-heading">WELCOME<br />BACK.</h1>
-            <p className="hl-sub">Sign in to access your talent dashboard<br />and manage your hiring pipeline.</p>
-
-            {/* Form */}
-            <form className="hl-form" onSubmit={handleLogin} noValidate>
-
-              {/* Email */}
-              <div className={`hl-field ${focusedField === "email" ? "focused" : ""}`}>
-                <label className="hl-label" htmlFor="email">WORK EMAIL</label>
-                <div className="hl-input-wrap">
-                  <input
-                    id="email"
-                    type="email"
-                    className="hl-input"
-                    placeholder="you@studio.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    onFocus={() => setFocusedField("email")}
-                    onBlur={() => setFocusedField(null)}
-                    autoComplete="email"
-                  />
-                </div>
-              </div>
-
-              {/* Password */}
-              <div className={`hl-field ${focusedField === "password" ? "focused" : ""}`}>
-                <label className="hl-label" htmlFor="password">PASSWORD</label>
-                <div className="hl-input-wrap">
-                  <input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    className="hl-input has-right"
-                    placeholder="••••••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onFocus={() => setFocusedField("password")}
-                    onBlur={() => setFocusedField(null)}
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    className="hl-input-btn"
-                    onClick={() => setShowPassword((p) => !p)}
-                    tabIndex={-1}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-                        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-                        <line x1="1" y1="1" x2="23" y2="23"/>
-                      </svg>
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                        <circle cx="12" cy="12" r="3"/>
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Forgot password */}
-              <div className="hl-forgot">
-                <button
-                  type="button"
-                  className="hl-forgot-btn"
-                  onClick={() => router.push("/hire/forgot-password")}
-                >
-                  FORGOT PASSWORD?
-                </button>
-              </div>
-
-              {/* Error */}
-              {error && <div className="hl-error">{error}</div>}
-
-              {/* Submit */}
-              <button type="submit" className="hl-submit" disabled={loading}>
-                {loading ? (
-                  <>
-                    <div className="hl-spinner" />
-                    SIGNING IN...
-                  </>
-                ) : (
-                  <>
-                    SIGN IN
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M5 12h14M12 5l7 7-7 7"/>
-                    </svg>
-                  </>
-                )}
-              </button>
-
-              {/* Divider */}
-              <div className="hl-or">
-                <div className="hl-or-line" />
-                <span className="hl-or-text">OR</span>
-                <div className="hl-or-line" />
-              </div>
-
-              {/* Register */}
-              <div className="hl-register">
-                DON'T HAVE AN ACCOUNT?&nbsp;
-                <button
-                  type="button"
-                  className="hl-register-link"
-                  onClick={() => router.push("/hire/register")}
-                >
-                  REGISTER NOW →
-                </button>
-              </div>
-
-            </form>
-
-            <p className="hl-bottom-note">
-              RADAR · SECURE · VERIFIED · TRUSTED
-            </p>
-
+          <div className="hlg-divider-row">
+            <div className="hlg-divider-line" />
+            <span className="hlg-divider-text">NEW HERE</span>
+            <div className="hlg-divider-line" />
           </div>
-        </div>
 
+          <p className="hlg-register">
+            Don't have an account?{" "}
+            <button type="button" onClick={() => router.push("/register")}>
+              Register now
+            </button>
+          </p>
+
+          <button type="button" className="hlg-back" onClick={() => router.push("/")}>
+            ← Back to radar.editorzzz
+          </button>
+        </div>
       </div>
     </>
   );
