@@ -38,6 +38,25 @@ export function registerUser(data: any) {
 }
 
 
+
+
+export function login(data: any) {
+  return apiRequest("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+
+
+
+
+export function loginEditor(data: any) {
+  return apiRequest("/api/auth/login-editors", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
       export function verifyPhone(data:any){
         return apiRequest("/api/auth/verify-phone",{
                     method:"POST",
