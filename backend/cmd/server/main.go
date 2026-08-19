@@ -73,7 +73,7 @@ routes.AuthRoutes(router,client,rdb)
 port:=os.Getenv("PORT")
 
 if port==""{
-port="1100"
+port="1200"
 }
 
 log.Printf("Server started on port %s",port)
