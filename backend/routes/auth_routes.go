@@ -22,5 +22,5 @@ func AuthRoutes(router *gin.Engine,client*mongo.Client, redis *redis.Client){
 auth.POST("/forgot-password",controllers.ForgetPassword(client))
 	auth.POST("/reset-password",controllers.ResetPassword(client))
 	auth.GET("/phone-cooldown", controllers.CheckPhoneCooldown(redis,client))
-
+auth.POST("/resend-phone-otp",controllers.ResendPhoneOtp(client,redis))
 }
