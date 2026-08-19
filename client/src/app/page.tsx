@@ -438,7 +438,7 @@ export default function HomePage() {
             {/* Editor card */}
             <button
               className="rdr-card"
-              onClick={() => router.push("/editor/login")}
+              onClick={() => router.push("/login-editors")}
             >
               <div className="rdr-card-bar" />
               <div className="rdr-card-icon">
@@ -465,7 +465,7 @@ export default function HomePage() {
             {/* Hiring Manager card */}
             <button
               className="rdr-card"
-              onClick={() => router.push("/hire/login")}
+              onClick={() => router.push("/login")}
             >
               <div className="rdr-card-bar" />
               <div className="rdr-card-icon">
