@@ -29,3 +29,10 @@ const BASE_URL =
 }
 
 
+
+export function registerUser(data: any) {
+  return apiRequest("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
