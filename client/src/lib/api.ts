@@ -48,3 +48,29 @@ export function registerUser(data: any) {
        
 }
 
+
+export function resendPhoneOtp(data: any) {
+  return apiRequest("/api/auth/resend-phone-otp", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+
+export function ForgotPassword(data:any){
+  return apiRequest("/api/auth/forgot-password",{
+    method:"POST",
+    body:JSON.stringify(data),
+  });
+  
+}
+
+
+export function ResetPassword(data:any){
+  return apiRequest("/api/auth/reset-password",{
+    method:"POST",
+    body:JSON.stringify(data),
+  });
+}
+
+
