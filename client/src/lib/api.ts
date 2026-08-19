@@ -36,3 +36,15 @@ export function registerUser(data: any) {
     body: JSON.stringify(data),
   });
 }
+
+
+      export function verifyPhone(data:any){
+        return apiRequest("/api/auth/verify-phone",{
+                    method:"POST",
+                    body:JSON.stringify(data)
+
+        })
+
+       
+}
+
