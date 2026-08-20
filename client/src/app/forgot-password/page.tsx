@@ -86,14 +86,12 @@ export default function ForgotPasswordPage() {
     };
   }, [success]);
 
-  // Cooldown ticker
   useEffect(() => {
     if (cooldown <= 0) return;
     const t = setTimeout(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  // Check if this identifier already has an active cooldown/block before letting them resubmit
   async function checkCooldownFor(id: string) {
     if (!id.trim()) return { cooldown: 0, blocked: false };
     setCheckingCooldown(true);
@@ -105,7 +103,6 @@ export default function ForgotPasswordPage() {
       setBlocked(b);
       return { cooldown: c, blocked: b };
     } catch {
-      // Non-fatal — if the cooldown check fails we just let the submit attempt proceed
       return { cooldown: 0, blocked: false };
     } finally {
       setCheckingCooldown(false);
@@ -126,7 +123,6 @@ export default function ForgotPasswordPage() {
 
     setLoading(true);
 
-    // Respect any active cooldown/block before hitting the send endpoint
     const status = await checkCooldownFor(id);
     if (status.blocked) {
       setError("Too many attempts. Try again later.");
@@ -143,7 +139,7 @@ export default function ForgotPasswordPage() {
       const res: any = await ForgotPassword({ identifier: id });
       setSuccess(true);
       setTimeout(() => {
-        router.push(`/hire/reset-password?identifier=${encodeURIComponent(id)}`);
+        router.push(`/reset-password?identifier=${encodeURIComponent(id)}`);
       }, 1200);
       void res;
     } catch (err: any) {
