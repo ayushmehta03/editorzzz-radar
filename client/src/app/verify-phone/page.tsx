@@ -97,7 +97,6 @@ export default function VerifyPhonePage() {
     };
   }, [success]);
 
-  // On mount, ask the backend if a cooldown/block is already active for this user
   useEffect(() => {
     if (!userId) return;
     checkPhoneCooldown({ user_id: userId })
@@ -106,11 +105,9 @@ export default function VerifyPhonePage() {
         if (res?.blocked) setBlocked(true);
       })
       .catch(() => {
-        // Non-fatal — just means we don't know the cooldown state yet
       });
   }, [userId]);
 
-  // Cooldown ticker
   useEffect(() => {
     if (cooldown <= 0) return;
     const t = setTimeout(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
