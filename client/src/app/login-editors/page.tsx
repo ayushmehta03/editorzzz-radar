@@ -14,7 +14,6 @@ export default function EditorLoginPage() {
   const [error, setError] = useState("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // detect if identifier looks like a phone
   const isPhone = /^\d+$/.test(identifier.trim());
 
   async function handleLogin(e: React.FormEvent) {
