@@ -542,6 +542,8 @@ func ResetPassword(client *mongo.Client) gin.HandlerFunc {
 		})
 	}
 }
+
+
 func CheckPhoneCooldown(redisClient *redis.Client, mongoClient *mongo.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.Query("user_id")
@@ -570,7 +572,6 @@ func CheckPhoneCooldown(redisClient *redis.Client, mongoClient *mongo.Client) gi
 			}
 		}
 
-		// No user found / no user ID provided
 		if userID == "" {
 			c.JSON(http.StatusOK, gin.H{
 				"cooldown": 0,
@@ -583,7 +584,6 @@ func CheckPhoneCooldown(redisClient *redis.Client, mongoClient *mongo.Client) gi
 		blockKey := fmt.Sprintf("%s:block", keyBase)
 		cooldownKey := fmt.Sprintf("%s:cooldown", keyBase)
 
-		// Check if user is blocked
 		if blocked, _ := redisClient.Exists(ctx, blockKey).Result(); blocked == 1 {
 			ttl, _ := redisClient.TTL(ctx, blockKey).Result()
 
@@ -594,7 +594,6 @@ func CheckPhoneCooldown(redisClient *redis.Client, mongoClient *mongo.Client) gi
 			return
 		}
 
-		// Check OTP cooldown
 		if exists, _ := redisClient.Exists(ctx, cooldownKey).Result(); exists == 1 {
 			ttl, _ := redisClient.TTL(ctx, cooldownKey).Result()
 
@@ -605,7 +604,6 @@ func CheckPhoneCooldown(redisClient *redis.Client, mongoClient *mongo.Client) gi
 			return
 		}
 
-		// No cooldown / block
 		c.JSON(http.StatusOK, gin.H{
 			"cooldown": 0,
 			"blocked":  false,
