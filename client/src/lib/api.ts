@@ -93,3 +93,17 @@ export function ResetPassword(data:any){
 }
 
 
+
+export function checkPhoneCooldown(data: { user_id?: string; identifier?: string }) {
+  const params: Record<string, string> = {};
+  
+  if (data.user_id) params.user_id = data.user_id;
+  if (data.identifier) params.identifier = data.identifier;
+
+  const queryString = new URLSearchParams(params).toString();
+  
+  return apiRequest(`/api/auth/phone-cooldown?${queryString}`, {
+    method: "GET",
+  });
+}
+
