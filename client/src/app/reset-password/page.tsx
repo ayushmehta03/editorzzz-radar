@@ -103,7 +103,6 @@ export default function ResetPasswordPage() {
     };
   }, [success]);
 
-  // On mount, ask if a cooldown/block is already active for this identifier
   useEffect(() => {
     if (!identifier.trim()) return;
     checkPhoneCooldown({ identifier: identifier.trim() })

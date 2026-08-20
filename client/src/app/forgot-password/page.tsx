@@ -139,7 +139,7 @@ export default function ForgotPasswordPage() {
       const res: any = await ForgotPassword({ identifier: id });
       setSuccess(true);
       setTimeout(() => {
-        router.push(`/reset-password?identifier=${encodeURIComponent(id)}`);
+        router.push(`/reset-password`);
       }, 1200);
       void res;
     } catch (err: any) {
