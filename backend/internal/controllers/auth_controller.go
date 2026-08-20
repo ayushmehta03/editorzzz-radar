@@ -251,6 +251,7 @@ func LoginEditors(client *mongo.Client) gin.HandlerFunc {
 	}
 }
 
+
 func LoginWithPassword(client *mongo.Client)gin.HandlerFunc{
 	hirersCollection:=database.OpenCollection("hirers",client)
 

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, FormEvent } from "react";
-import { registerUser } from "@/lib/api"; // adjust import path to wherever api.ts lives
+import { registerUser } from "@/lib/api"; 
 
 interface FormState {
   full_name: string;
@@ -173,7 +173,6 @@ export default function HireRegisterPage() {
         company_name: form.company_name.trim(),
       });
 
-      // Success shape: { message, id }
       if (res?.id) {
         router.push(`/verify-phone?id=${res.id}`);
         return;
