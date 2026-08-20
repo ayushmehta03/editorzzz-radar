@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { loginEditor } from "@/lib/api";
 
@@ -12,13 +12,13 @@ export default function EditorLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [phoneVerifyError, setPhoneVerifyError] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
-
-  const isPhone = /^\d+$/.test(identifier.trim());
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setPhoneVerifyError(false);
 
     if (!identifier.trim() || !password) {
       setError("ALL FIELDS ARE REQUIRED.");
@@ -32,26 +32,30 @@ export default function EditorLoginPage() {
         password,
       });
 
-      // Phone not verified → redirect to OTP page
-      if (res?.redirect === "/verify-phone") {
-        router.push(`/editor/verify-phone?id=${res.id}`);
-        return;
-      }
-
+      // Success — store token and go to dashboard
       if (res?.token) {
         localStorage.setItem("editor_token", res.token);
         router.push("/editor/dashboard");
       }
     } catch (err: any) {
-      const msg: string = err.message || "";
-      if (msg.toLowerCase().includes("no account found")) {
-        setError("NO ACCOUNT FOUND. PLEASE REGISTER FIRST.");
-      } else if (msg.toLowerCase().includes("invalid password")) {
+      const raw: string = err.message || "";
+      const lower = raw.toLowerCase();
+
+      if (lower.includes("no account found") || lower.includes("create an account")) {
+        setError("NO ACCOUNT FOUND. CREATE ONE ON EDITORZZZ.COM.");
+      } else if (lower.includes("invalid password")) {
         setError("WRONG PASSWORD. TRY AGAIN.");
-      } else if (msg.toLowerCase().includes("phone verification")) {
-        setError("PHONE VERIFICATION REQUIRED.");
+      } else if (
+        lower.includes("phone verification") ||
+        lower.includes("verify your phone") ||
+        err.status === 403
+      ) {
+        setPhoneVerifyError(true);
+      } else if (lower.includes("failed to find") || lower.includes("internal")) {
+        // 500
+        setError("SERVER ERROR. PLEASE TRY AGAIN LATER.");
       } else {
-        setError(msg || "SOMETHING WENT WRONG. TRY AGAIN.");
+        setError(raw || "SOMETHING WENT WRONG. TRY AGAIN.");
       }
     } finally {
       setLoading(false);
@@ -546,6 +550,53 @@ export default function EditorLoginPage() {
           75%      { transform: translateX(6px); }
         }
 
+        /* phone verify banner */
+        .el-phone-verify {
+          background: rgba(255,165,0,0.07);
+          border: 1.5px solid rgba(255,165,0,0.3);
+          padding: 14px 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          animation: shake 0.3s ease;
+        }
+        .el-phone-verify-title {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+        }
+        .el-phone-verify-icon { color: #ffaa33; flex-shrink: 0; margin-top: 1px; }
+        .el-phone-verify-msg {
+          font-family: 'Space Mono', monospace;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          color: #ffaa33;
+          line-height: 1.65;
+          text-transform: uppercase;
+        }
+        .el-phone-verify-msg span { color: #fff; }
+        .el-phone-verify-link {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 10px 16px;
+          background: #ffaa33;
+          color: #0a0a0a;
+          font-family: 'Space Grotesk', sans-serif;
+          font-weight: 900;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          text-decoration: none;
+          transition: opacity 0.2s;
+          border: none;
+          cursor: pointer;
+          width: 100%;
+        }
+        .el-phone-verify-link:hover { opacity: 0.85; }
+
         /* submit */
         .el-submit {
           margin-top: 6px;
@@ -736,6 +787,7 @@ export default function EditorLoginPage() {
               router={router}
               loading={loading}
               error={error}
+              phoneVerifyError={phoneVerifyError}
               identifier={identifier}
               setIdentifier={setIdentifier}
               password={password}
@@ -759,7 +811,7 @@ export default function EditorLoginPage() {
 
 /* ── Extracted inner form component so hooks are clean ── */
 function EditorLoginForm({
-  router, loading, error,
+  router, loading, error, phoneVerifyError,
   identifier, setIdentifier,
   password, setPassword,
   showPassword, setShowPassword,
@@ -862,7 +914,6 @@ function EditorLoginForm({
           </div>
         </div>
 
-        {/* Forgot password toggle */}
         <div className="el-forgot">
           <button
             type="button"
@@ -897,8 +948,42 @@ function EditorLoginForm({
           </div>
         )}
 
-        {/* Error */}
+        {/* Generic error */}
         {error && <div className="el-error">⚠ {error}</div>}
+
+        {/* Phone not verified — special banner */}
+        {phoneVerifyError && (
+          <div className="el-phone-verify">
+            <div className="el-phone-verify-title">
+              <div className="el-phone-verify-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div className="el-phone-verify-msg">
+                PHONE NUMBER NOT VERIFIED.<br />
+                PLEASE VERIFY YOUR PHONE ON{" "}
+                <span>EDITORZZZ.COM</span>{" "}
+                BEFORE LOGGING IN HERE.
+              </div>
+            </div>
+            <a
+              href="https://editorzzz.com/verify-phone"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="el-phone-verify-link"
+            >
+              VERIFY ON EDITORZZZ.COM
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </a>
+          </div>
+        )}
 
         {/* Submit */}
         <button type="submit" className="el-submit" disabled={loading}>
